@@ -1,0 +1,59 @@
+name: SuperKart MLOps Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+
+  register-dataset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: pip install -r superkart_project/requirements.txt
+      - name: Upload raw dataset to HF
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python superkart_project/model_building/data_register.py
+
+  data-prep:
+    needs: register-dataset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: pip install -r superkart_project/requirements.txt
+      - name: Run data preparation
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python superkart_project/model_building/prep.py
+
+  model-training:
+    needs: data-prep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: pip install -r superkart_project/requirements.txt
+      - name: Start MLflow server
+        run: |
+          nohup mlflow ui --host 0.0.0.0 --port 5000 &
+          sleep 5
+      - name: Train model
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python superkart_project/model_building/train.py
+
+  deploy-hosting:
+    needs: [model-training, data-prep, register-dataset]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: pip install -r superkart_project/requirements.txt
+      - name: Push deployment files to HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python superkart_project/hosting/hosting.py
